@@ -348,8 +348,8 @@ const COLUMNS = [
     info: "Total number of currently active premium sites on this account right now, across all editors (Studio + Classic). Used as our proxy for current account size. Note: Salesforce has no field for 'currently active Studio premiums' specifically, so this column can't be split by editor - use % Studio (All-Time) for that. Source: Salesforce field Active_Premiums__c."
   },
   {
-    key: 'studio_premiums', label: 'Studio Premiums', filter: false, type: 'number',
-    info: "Number of this account's all-time premiums that were built on Wix Studio (the current editor, not Studio Two - which hasn't launched and has no dedicated field yet). A lifetime-cumulative counter, not a current snapshot. Used as a proxy for how invested this partner already is in Studio. Source: Salesforce field Number_of_Wix_Studio_Premiums__c."
+    key: 'studio_premiums', label: 'Studio Premiums (All-Time)', filter: false, type: 'number',
+    info: "Number of this account's all-time premiums that were built on Wix Studio (the current editor, not Studio Two - which hasn't launched and has no dedicated field yet). This is a lifetime-cumulative counter, not a current snapshot - it can be higher than Active Premiums if some of those Studio sites later churned/downgraded, so don't expect Studio Premiums <= Active Premiums. Used as a proxy for how invested this partner already is in Studio. Source: Salesforce field Number_of_Wix_Studio_Premiums__c."
   },
   {
     key: 'aiStatusDisplay', label: 'AI Curiosity', filter: true,
