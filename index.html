@@ -218,6 +218,7 @@
   .demo-chip.todo { color: var(--muted); }
   .demo-dot { font-weight: 700; }
   .demo-duration { color: var(--muted); }
+  .demo-auto-badge { display:inline-block; font-size:10px; font-weight:700; color:#fff; background:var(--accent); border-radius:3px; padding:0 4px; vertical-align:middle; }
   .demo-empty-note { width: 100%; font-size: 12px; color: var(--muted); font-style: italic; margin-top: 4px; }
 </style>
 </head>
@@ -273,15 +274,27 @@ let state = {
 };
 
 const DEMO_CATALOG = [
-  { name: 'Getting Started: Aria', duration: 10 },
-  { name: 'Getting Started: Blank & Template', duration: 5 },
-  { name: 'Tour for Studio Editor Partners', duration: 25 },
-  { name: 'Tour for Classic Editor Partners', duration: 30 },
-  { name: 'SEO & Accessibility', duration: 10 },
-  { name: 'New Design Tools', duration: 10 },
-  { name: 'Context & Data', duration: 15 },
-  { name: 'Code', duration: 15 },
+  { name: 'Getting Started: Aria', duration: 10, mondayLabel: 'Getting Started: Aria' },
+  { name: 'Getting Started: Blank & Template', duration: 5, mondayLabel: 'Getting Started: Blank' },
+  { name: 'Tour for Studio Editor Partners', duration: 25, mondayLabel: 'Studio Tour' },
+  { name: 'Tour for Classic Editor Partners', duration: 30, mondayLabel: 'Classic Tour' },
+  { name: 'SEO & Accessibility', duration: 10, mondayLabel: 'SEO' },
+  { name: 'New Design Tools', duration: 10, mondayLabel: 'Design' },
+  { name: 'Context & Data', duration: 15, mondayLabel: 'Context & Data' },
+  { name: 'Code', duration: 15, mondayLabel: 'Coding' },
 ];
+
+// Returns the set of demo names (from DEMO_CATALOG) that the Monday.com
+// board's "Demos Held" column says were delivered for this account. That
+// column is meant to auto-fill from Gong, so once it's populated there this
+// picks it up on the next data refresh with no dashboard changes needed.
+function mondayDeliveredDemos(r) {
+  const raw = r.monday && r.monday.demos_held;
+  if (!raw) return new Set();
+  const labels = raw.split(',').map(s => s.trim()).filter(Boolean);
+  const names = DEMO_CATALOG.filter(d => labels.includes(d.mondayLabel)).map(d => d.name);
+  return new Set(names);
+}
 
 // Delivered demos per account, keyed by account id. Starts empty — no delivery
 // log exists yet in Salesforce (see Product_Session_Demo__c proposal). Until that
@@ -309,9 +322,12 @@ function daysBetween(isoA, isoB) {
 function refreshFollowupFields() {
   const today = todayISO();
   DATA.forEach(r => {
-    const delivered = DEMOS_DELIVERED[r.id] || [];
-    const dates = delivered.map(d => d.deliveredAt).filter(Boolean).sort();
-    if (!delivered.length) {
+    const manual = DEMOS_DELIVERED[r.id] || [];
+    const autoNames = mondayDeliveredDemos(r);
+    const manualNames = new Set(manual.map(d => d.name));
+    const totalDelivered = new Set([...manualNames, ...autoNames]).size;
+    const dates = manual.map(d => d.deliveredAt).filter(Boolean).sort();
+    if (!totalDelivered) {
       r.followupStatus = 'No demo yet'; r.followupDays = null; return;
     }
     if (!dates.length) {
@@ -369,7 +385,7 @@ const COLUMNS = [
   },
   {
     key: 'demos', label: 'Demos Delivered', filter: false, sortable: false,
-    info: "Which of the 8 Studio Two TtT demos (from Vicky's TtT site) have been shown to this partner. Click 'View' to expand the full checklist per account. No delivery log exists yet in Salesforce - this will populate once PSMs start logging demos there."
+    info: "Which of the 8 Studio Two TtT demos (from Vicky's TtT site) have been shown to this partner. Demos marked with an 'M' badge are synced automatically from the team's Monday.com board (Studio Two - Post Launch Training, 'Demos Held' column - meant to auto-fill from Gong). That column is currently empty on the board for every account, so it'll start showing data as soon as PSMs/Gong populate it there - no dashboard change needed. You can also click a demo chip to log it manually with today's date in the meantime (saved locally in your browser only)."
   },
   {
     key: 'followupStatus', label: 'Follow-up', filter: true,
@@ -698,6 +714,8 @@ function render() {
   document.getElementById('countBadge').textContent = `Showing ${sorted.length} accounts`;
   document.getElementById('tbody').innerHTML = sorted.map(r => {
     const delivered = DEMOS_DELIVERED[r.id] || [];
+    const autoNames = mondayDeliveredDemos(r);
+    const deliveredCount = new Set([...delivered.map(d => d.name), ...autoNames]).size;
     const isOpen = state.expandedIds.has(r.id);
     return `
     <tr class="acc-row" data-id="${r.id}">
@@ -713,7 +731,7 @@ function render() {
       <td>${activityPill(r.days_since_activity)}</td>
       <td>
         <button class="demo-toggle" data-id="${r.id}">
-          ${delivered.length}/${DEMO_CATALOG.length} <span class="chevron">${isOpen ? '▴' : '▾'}</span>
+          ${deliveredCount}/${DEMO_CATALOG.length} <span class="chevron">${isOpen ? '▴' : '▾'}</span>
         </button>
       </td>
       <td>${followupPill(r.followupStatus, r.followupDays)}</td>
@@ -725,13 +743,16 @@ function render() {
         <div class="demo-panel">
           <div class="demo-panel-hint">Click a demo to mark it delivered / not delivered:</div>
           ${DEMO_CATALOG.map(d => {
-            const isDelivered = delivered.some(dd => dd.name === d.name);
-            return `<div class="demo-chip ${isDelivered ? 'done' : 'todo'}" data-id="${r.id}" data-demo="${d.name}">
+            const isAuto = autoNames.has(d.name);
+            const isManual = delivered.some(dd => dd.name === d.name);
+            const isDelivered = isAuto || isManual;
+            const sourceNote = isAuto ? ' title="Auto-synced from the Monday.com board (Demos Held)"' : '';
+            return `<div class="demo-chip ${isDelivered ? 'done' : 'todo'}" data-id="${r.id}" data-demo="${d.name}"${sourceNote}>
               <span class="demo-dot">${isDelivered ? '✓' : '—'}</span>
-              ${d.name} <span class="demo-duration">(${d.duration}min)</span>
+              ${d.name}${isAuto ? ' <span class="demo-auto-badge">M</span>' : ''} <span class="demo-duration">(${d.duration}min)</span>
             </div>`;
           }).join('')}
-          ${delivered.length === 0 ? `<div class="demo-empty-note">No demos logged yet for this account. This is stored locally in your browser for now, until Salesforce has a real Studio Two demo field.</div>` : ''}
+          ${deliveredCount === 0 ? `<div class="demo-empty-note">No demos logged yet for this account. Demos marked "M" sync automatically from the team's Monday.com board (Demos Held column); click a demo here to also log it manually with today's date.</div>` : ''}
         </div>
       </td>
     </tr>
